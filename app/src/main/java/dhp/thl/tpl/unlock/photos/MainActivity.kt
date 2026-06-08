@@ -2,6 +2,7 @@ package dhp.thl.tpl.unlock.photos
 
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,7 +75,7 @@ fun MainScreen() {
         if (pin != null) pinInput = pin!!
     }
 
-    val points = remember(pointsStr) { deserializePoints(pointsStr).toMutableList() }
+    val points = remember(pointsStr) { deserializePoints(pointsStr) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -90,10 +94,10 @@ fun MainScreen() {
     if (isSettingPoints && !imageUri.isNullOrBlank()) {
         SetPointsScreen(
             imageUri = imageUri!!,
-            points = points,
+            initialPoints = points,
             tapTolerance = tapTolerance,
             requiredPoints = pointCount,
-            onPointsChanged = { newPoints ->
+            onSavePoints = { newPoints ->
                 scope.launch { prefs.savePoints(serializePoints(newPoints)) }
             },
             onClose = { isSettingPoints = false }
@@ -125,8 +129,20 @@ fun MainScreen() {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Shizuku Status", style = MaterialTheme.typography.titleMedium)
                     var shizukuOk by remember { mutableStateOf(Shizuku.pingBinder()) }
+                    var hasPermission by remember { mutableStateOf(if (shizukuOk) Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED else false) }
+
+                    DisposableEffect(Unit) {
+                        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+                            if (requestCode == 0) {
+                                hasPermission = grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            }
+                        }
+                        Shizuku.addRequestPermissionResultListener(listener)
+                        onDispose { Shizuku.removeRequestPermissionResultListener(listener) }
+                    }
+
                     if (shizukuOk) {
-                        if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        if (!hasPermission) {
                             Button(onClick = { Shizuku.requestPermission(0) }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Request Shizuku Permission")
                             }
@@ -147,15 +163,45 @@ fun MainScreen() {
                     Text("Unlock PIN", style = MaterialTheme.typography.titleMedium)
                     OutlinedTextField(
                         value = pinInput,
-                        onValueChange = { 
-                            pinInput = it
-                            scope.launch { prefs.savePin(it) }
-                        },
+                        onValueChange = { pinInput = it },
                         label = { Text("Device PIN") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                scope.launch { prefs.savePin(pinInput) }
+                                Toast.makeText(context, "PIN Saved", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Save PIN")
+                        }
+                        Button(
+                            onClick = {
+                                if (Shizuku.pingBinder() && pinInput.isNotBlank()) {
+                                    scope.launch {
+                                        try {
+                                            val newProcessMethod = Shizuku::class.java.getMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+                                            val process = newProcessMethod.invoke(null, arrayOf("sh", "-c", "input text $pinInput && input keyevent 66"), null, null) as Process
+                                            process.waitFor()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            Toast.makeText(context, "Test Failed", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Shizuku not running or PIN empty", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("Test Unlock")
+                        }
+                    }
                 }
             }
 
@@ -224,8 +270,47 @@ fun MainScreen() {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Image Configuration", style = MaterialTheme.typography.titleMedium)
-                    Button(onClick = { launcher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (imageUri.isNullOrBlank()) "Select Image" else "Change Image")
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { launcher.launch("image/*") }, modifier = Modifier.weight(1f)) {
+                            Text(if (imageUri.isNullOrBlank()) "Select Image" else "Change Image")
+                        }
+                        Button(
+                            onClick = { scope.launch { prefs.saveImageUri("") } },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+                        ) {
+                            Text("Reset Image")
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            try {
+                                val wallpaperManager = android.app.WallpaperManager.getInstance(context)
+                                val pfd = wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_LOCK) 
+                                    ?: wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_SYSTEM)
+                                
+                                if (pfd != null) {
+                                    val file = File(context.cacheDir, "lockscreen_wallpaper.png")
+                                    FileInputStream(pfd.fileDescriptor).use { input ->
+                                        FileOutputStream(file).use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                    scope.launch { prefs.saveImageUri(Uri.fromFile(file).toString()) }
+                                    Toast.makeText(context, "Lock screen wallpaper loaded", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Could not get lock screen wallpaper", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Toast.makeText(context, "Error getting wallpaper. Check permissions.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Use System Lock Screen Image")
                     }
 
                     if (!imageUri.isNullOrBlank()) {
@@ -255,14 +340,15 @@ fun MainScreen() {
 @Composable
 fun SetPointsScreen(
     imageUri: String,
-    points: MutableList<PointData>,
+    initialPoints: List<PointData>,
     tapTolerance: Float,
     requiredPoints: Int,
-    onPointsChanged: (List<PointData>) -> Unit,
+    onSavePoints: (List<PointData>) -> Unit,
     onClose: () -> Unit
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
+    var points by remember { mutableStateOf(initialPoints.toMutableList()) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
@@ -279,8 +365,7 @@ fun SetPointsScreen(
                                 xPct = offset.x / size.width,
                                 yPct = offset.y / size.height
                             )
-                            val newList = points.toMutableList().apply { add(newPoint) }
-                            onPointsChanged(newList)
+                            points = points.toMutableList().apply { add(newPoint) }
                         }
                     }
                 }
@@ -317,14 +402,16 @@ fun SetPointsScreen(
         ) {
             Button(onClick = {
                 if (points.isNotEmpty()) {
-                    val newList = points.toMutableList().apply { removeLast() }
-                    onPointsChanged(newList)
+                    points = points.toMutableList().apply { removeLast() }
                 }
             }) {
                 Text("Remove Last Point")
             }
             Button(
-                onClick = onClose,
+                onClick = {
+                    onSavePoints(points)
+                    onClose()
+                },
                 enabled = points.size == requiredPoints
             ) {
                 Text("Done (${points.size}/$requiredPoints)")
