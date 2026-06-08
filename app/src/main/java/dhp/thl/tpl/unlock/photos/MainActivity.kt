@@ -36,6 +36,9 @@ import rikka.shizuku.Shizuku
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.os.IBinder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,15 +98,32 @@ fun MainScreen() {
         if (isGranted) {
             try {
                 val wallpaperManager = android.app.WallpaperManager.getInstance(context)
-                val pfd = wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_LOCK) 
-                    ?: wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_SYSTEM)
+                // Get the wallpaper drawable (this is more reliable than getWallpaperFile)
+                val drawable = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_LOCK) 
+                        ?: wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_SYSTEM)
+                } else {
+                    wallpaperManager.drawable
+                }
                 
-                if (pfd != null) {
+                if (drawable != null) {
+                    val bitmap = if (drawable is android.graphics.drawable.BitmapDrawable) {
+                        drawable.bitmap
+                    } else {
+                        val bmp = android.graphics.Bitmap.createBitmap(
+                            drawable.intrinsicWidth.takeIf { it > 0 } ?: 1080,
+                            drawable.intrinsicHeight.takeIf { it > 0 } ?: 1920,
+                            android.graphics.Bitmap.Config.ARGB_8888
+                        )
+                        val canvas = android.graphics.Canvas(bmp)
+                        drawable.setBounds(0, 0, canvas.width, canvas.height)
+                        drawable.draw(canvas)
+                        bmp
+                    }
+                    
                     val file = File(context.cacheDir, "lockscreen_wallpaper.png")
-                    FileInputStream(pfd.fileDescriptor).use { input ->
-                        FileOutputStream(file).use { output ->
-                            input.copyTo(output)
-                        }
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
                     }
                     scope.launch { prefs.saveImageUri(Uri.fromFile(file).toString()) }
                     Toast.makeText(context, "Lock screen wallpaper loaded", Toast.LENGTH_SHORT).show()

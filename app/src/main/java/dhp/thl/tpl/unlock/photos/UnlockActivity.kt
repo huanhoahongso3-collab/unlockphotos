@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
 import kotlin.math.abs
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.os.IBinder
 
 class UnlockActivity : ComponentActivity() {
 
@@ -87,11 +90,21 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
             kotlinx.coroutines.delay(600) // Wait for activity to close and lock screen to gain focus
             if (Shizuku.pingBinder() && !pin.isNullOrBlank()) {
                 try {
-                    // Use Shizuku to run adb command to input PIN and press enter
-                    // newProcess is hidden in newer Shizuku API, so we use reflection
-                    val newProcessMethod = Shizuku::class.java.getMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
-                    val process = newProcessMethod.invoke(null, arrayOf("sh", "-c", "input text $pin && input keyevent 66"), null, null) as Process
-                    process.waitFor()
+                    val args = Shizuku.UserServiceArgs(ComponentName(BuildConfig.APPLICATION_ID, UserService::class.java.name))
+                        .daemon(false)
+                        .processNameSuffix("service")
+                        .debuggable(BuildConfig.DEBUG)
+                        .version(1)
+
+                    Shizuku.bindUserService(args, object : ServiceConnection {
+                        override fun onServiceConnected(componentName: ComponentName, binder: IBinder?) {
+                            val iUserService = IUserService.Stub.asInterface(binder)
+                            iUserService.executeCommand("input text $pin && input keyevent 66")
+                            Shizuku.unbindUserService(args, this, true)
+                        }
+
+                        override fun onServiceDisconnected(componentName: ComponentName) {}
+                    })
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
