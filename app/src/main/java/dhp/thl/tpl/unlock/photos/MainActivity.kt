@@ -89,6 +89,36 @@ fun MainScreen() {
         }
     }
 
+    val wallpaperPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                val wallpaperManager = android.app.WallpaperManager.getInstance(context)
+                val pfd = wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_LOCK) 
+                    ?: wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_SYSTEM)
+                
+                if (pfd != null) {
+                    val file = File(context.cacheDir, "lockscreen_wallpaper.png")
+                    FileInputStream(pfd.fileDescriptor).use { input ->
+                        FileOutputStream(file).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    scope.launch { prefs.saveImageUri(Uri.fromFile(file).toString()) }
+                    Toast.makeText(context, "Lock screen wallpaper loaded", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Could not get lock screen wallpaper", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Error getting wallpaper.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Storage permission required", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     var isSettingPoints by remember { mutableStateOf(false) }
 
     if (isSettingPoints && !imageUri.isNullOrBlank()) {
@@ -181,20 +211,8 @@ fun MainScreen() {
                         }
                         Button(
                             onClick = {
-                                if (Shizuku.pingBinder() && pinInput.isNotBlank()) {
-                                    scope.launch {
-                                        try {
-                                            val newProcessMethod = Shizuku::class.java.getMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
-                                            val process = newProcessMethod.invoke(null, arrayOf("sh", "-c", "input text $pinInput && input keyevent 66"), null, null) as Process
-                                            process.waitFor()
-                                        } catch (e: Exception) {
-                                            e.printStackTrace()
-                                            Toast.makeText(context, "Test Failed", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                } else {
-                                    Toast.makeText(context, "Shizuku not running or PIN empty", Toast.LENGTH_SHORT).show()
-                                }
+                                val intent = android.content.Intent(context, UnlockActivity::class.java)
+                                context.startActivity(intent)
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
@@ -286,26 +304,10 @@ fun MainScreen() {
 
                     Button(
                         onClick = {
-                            try {
-                                val wallpaperManager = android.app.WallpaperManager.getInstance(context)
-                                val pfd = wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_LOCK) 
-                                    ?: wallpaperManager.getWallpaperFile(android.app.WallpaperManager.FLAG_SYSTEM)
-                                
-                                if (pfd != null) {
-                                    val file = File(context.cacheDir, "lockscreen_wallpaper.png")
-                                    FileInputStream(pfd.fileDescriptor).use { input ->
-                                        FileOutputStream(file).use { output ->
-                                            input.copyTo(output)
-                                        }
-                                    }
-                                    scope.launch { prefs.saveImageUri(Uri.fromFile(file).toString()) }
-                                    Toast.makeText(context, "Lock screen wallpaper loaded", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Could not get lock screen wallpaper", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                                Toast.makeText(context, "Error getting wallpaper. Check permissions.", Toast.LENGTH_SHORT).show()
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                wallpaperPermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES)
+                            } else {
+                                wallpaperPermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()

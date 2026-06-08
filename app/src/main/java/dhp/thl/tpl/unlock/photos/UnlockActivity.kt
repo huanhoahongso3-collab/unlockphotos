@@ -82,7 +82,9 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
     val density = LocalDensity.current
 
     fun unlock() {
-        scope.launch {
+        onUnlockSuccess()
+        kotlinx.coroutines.GlobalScope.launch {
+            kotlinx.coroutines.delay(600) // Wait for activity to close and lock screen to gain focus
             if (Shizuku.pingBinder() && !pin.isNullOrBlank()) {
                 try {
                     // Use Shizuku to run adb command to input PIN and press enter
@@ -94,7 +96,6 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
                     e.printStackTrace()
                 }
             }
-            onUnlockSuccess()
         }
     }
 
