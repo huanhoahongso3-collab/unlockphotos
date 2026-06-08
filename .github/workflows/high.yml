@@ -1,0 +1,71 @@
+name: Build & Prerelease APKs
+
+on:
+  push:
+    branches:
+      - main # Change this to your default branch if it's 'master'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      # Generates a clean short SHA name (e.g., dev-36a25bb)
+      - name: Set Short SHA Environment Variable
+        id: vars
+        run: echo "short_sha=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'zulu'
+          cache: 'gradle'
+
+      - name: Setup Gradle (Fallback)
+        if: ${{ hashFiles('gradlew') == '' }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+
+      - name: Generate Gradle Wrapper if missing
+        run: |
+          if [ ! -f "./gradlew" ]; then
+            echo "gradlew not found! Generating modern wrapper..."
+            gradle wrapper
+          fi
+
+      - name: Commit and Push gradlew if missing
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: automatically restore missing gradle wrapper"
+          file_pattern: 'gradlew gradlew.bat gradle/wrapper/*'
+          disable_globbing: true
+
+      - name: Grant Execute Permission for Gradle
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Build Release Unsigned APK
+        run: ./gradlew assembleRelease
+
+      # Creates a prerelease using the custom tag name generated in Step 2
+      - name: Create Prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Development Build (${{ steps.vars.outputs.short_sha }})"
+          tag_name: ${{ steps.vars.outputs.short_sha }}
+          draft: false
+          prerelease: true
+          files: |
+            **/build/outputs/apk/debug/*-debug.apk
+            **/build/outputs/apk/release/*-release-unsigned.apk
