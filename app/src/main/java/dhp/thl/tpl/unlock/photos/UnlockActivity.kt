@@ -31,6 +31,11 @@ import kotlin.math.abs
 class UnlockActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        window.addFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
         super.onCreate(savedInstanceState)
         
         setShowWhenLocked(true)
@@ -64,6 +69,7 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
     var tapTolerance by remember { mutableStateOf(0.08f) }
     var stealthMode by remember { mutableStateOf(false) }
     var showClickedPoints by remember { mutableStateOf(true) }
+    var hideIncorrectToast by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -74,6 +80,7 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
         tapTolerance = prefs.tapToleranceFlow.first()
         stealthMode = prefs.stealthModeFlow.first()
         showClickedPoints = prefs.showClickedPointsFlow.first()
+        hideIncorrectToast = prefs.hideIncorrectToastFlow.first()
         pin = prefs.pinFlow.first()
     }
 
@@ -88,7 +95,7 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
             if (Shizuku.pingBinder() && !pin.isNullOrBlank()) {
                 try {
                     // Execute via rish script provided by Shizuku
-                    val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "/data/local/tmp/shizuku/rish -c 'input text $pin && input keyevent 66'"))
+                    val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "export RISH_APPLICATION_ID=dhp.thl.tpl.unlock.photos && /data/local/tmp/shizuku/rish -c 'input text $pin && input keyevent 66'"))
                     process.waitFor()
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -140,7 +147,9 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
                             if (!sequenceMatches) {
                                 if (currentTaps.size == targetPoints.size) {
                                     // User entered the complete sequence but it was wrong
-                                    Toast.makeText(context, "Incorrect", Toast.LENGTH_SHORT).show()
+                                    if (!hideIncorrectToast) {
+                                        Toast.makeText(context, "Incorrect", Toast.LENGTH_SHORT).show()
+                                    }
                                     currentTaps = mutableListOf()
                                 } else {
                                     // Partial mismatch, clear completely except we already added it above. Let's clear completely.
@@ -151,7 +160,9 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
                                     currentTaps = mutableListOf()
                                     // If we want to show incorrect on every wrong tap, it might be annoying. Let's just clear.
                                     // Or we show Toast "Incorrect" when they fail.
-                                    Toast.makeText(context, "Incorrect", Toast.LENGTH_SHORT).show()
+                                    if (!hideIncorrectToast) {
+                                        Toast.makeText(context, "Incorrect", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             } else if (currentTaps.size == targetPoints.size) {
                                 if (openImmediately) {

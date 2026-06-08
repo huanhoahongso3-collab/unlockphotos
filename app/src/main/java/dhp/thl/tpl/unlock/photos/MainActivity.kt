@@ -69,6 +69,7 @@ fun MainScreen() {
     val stealthMode by prefs.stealthModeFlow.collectAsState(initial = false)
     val showClickedPoints by prefs.showClickedPointsFlow.collectAsState(initial = true)
     val pointCount by prefs.pointCountFlow.collectAsState(initial = 3)
+    val hideIncorrectToast by prefs.hideIncorrectToastFlow.collectAsState(initial = false)
 
     var pinInput by remember { mutableStateOf("") }
     LaunchedEffect(pin) {
@@ -86,43 +87,6 @@ fun MainScreen() {
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
             scope.launch { prefs.saveImageUri(it.toString()) }
-        }
-    }
-
-    val wallpaperPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            try {
-                val wallpaperManager = android.app.WallpaperManager.getInstance(context)
-                val drawable = wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_LOCK) 
-                    ?: wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_SYSTEM)
-                
-                if (drawable != null) {
-                    val bitmap = if (drawable is android.graphics.drawable.BitmapDrawable) {
-                        drawable.bitmap
-                    } else {
-                        val b = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth.coerceAtLeast(1), drawable.intrinsicHeight.coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
-                        val canvas = android.graphics.Canvas(b)
-                        drawable.setBounds(0, 0, canvas.width, canvas.height)
-                        drawable.draw(canvas)
-                        b
-                    }
-                    val file = File(context.cacheDir, "lockscreen_wallpaper.png")
-                    FileOutputStream(file).use { out ->
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                    scope.launch { prefs.saveImageUri(Uri.fromFile(file).toString()) }
-                    Toast.makeText(context, "Lock screen wallpaper loaded", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "Could not get lock screen wallpaper", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(context, "Error getting wallpaper.", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(context, "Storage permission required", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -181,7 +145,7 @@ fun MainScreen() {
                     if (shizukuOk) {
                         if (!hasPermission) {
                             Button(onClick = { Shizuku.requestPermission(0) }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Request Shizuku Permission")
+                                Text("Request Shizuku Permission (API & Rish)")
                             }
                         } else {
                             Text("Running & Permitted", color = Color(0xFF388E3C))
@@ -270,6 +234,15 @@ fun MainScreen() {
                         Switch(checked = showClickedPoints, onCheckedChange = { scope.launch { prefs.setShowClickedPoints(it) } })
                     }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Hide \"Incorrect\" Toast")
+                        Switch(checked = hideIncorrectToast, onCheckedChange = { scope.launch { prefs.setHideIncorrectToast(it) } })
+                    }
+
                     Column {
                         Text("Tap Tolerance (Radius)")
                         Slider(
@@ -307,19 +280,6 @@ fun MainScreen() {
                         ) {
                             Text("Reset Image")
                         }
-                    }
-
-                    Button(
-                        onClick = {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                wallpaperPermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES)
-                            } else {
-                                wallpaperPermissionLauncher.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Use System Lock Screen Image")
                     }
 
                     if (!imageUri.isNullOrBlank()) {

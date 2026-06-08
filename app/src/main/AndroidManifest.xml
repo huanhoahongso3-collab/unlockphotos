@@ -32,8 +32,11 @@
             android:exported="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
+            android:showForAllUsers="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
             <!-- This intent filter allows third party widgets to trigger it -->
             <intent-filter>

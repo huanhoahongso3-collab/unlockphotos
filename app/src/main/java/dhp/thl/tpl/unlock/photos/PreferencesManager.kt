@@ -21,6 +21,7 @@ class PreferencesManager(private val context: Context) {
         val STEALTH_MODE_KEY = booleanPreferencesKey("stealth_mode")
         val SHOW_CLICKED_POINTS_KEY = booleanPreferencesKey("show_clicked_points")
         val POINT_COUNT_KEY = intPreferencesKey("point_count")
+        val HIDE_INCORRECT_TOAST_KEY = booleanPreferencesKey("hide_incorrect_toast")
     }
 
     val pinFlow: Flow<String?> = context.dataStore.data.map { it[PIN_KEY] }
@@ -32,6 +33,7 @@ class PreferencesManager(private val context: Context) {
     val stealthModeFlow: Flow<Boolean> = context.dataStore.data.map { it[STEALTH_MODE_KEY] ?: false }
     val showClickedPointsFlow: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CLICKED_POINTS_KEY] ?: true }
     val pointCountFlow: Flow<Int> = context.dataStore.data.map { it[POINT_COUNT_KEY] ?: 3 }
+    val hideIncorrectToastFlow: Flow<Boolean> = context.dataStore.data.map { it[HIDE_INCORRECT_TOAST_KEY] ?: false }
 
     suspend fun savePin(pin: String) {
         context.dataStore.edit { it[PIN_KEY] = pin }
@@ -67,5 +69,9 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setPointCount(value: Int) {
         context.dataStore.edit { it[POINT_COUNT_KEY] = value }
+    }
+
+    suspend fun setHideIncorrectToast(value: Boolean) {
+        context.dataStore.edit { it[HIDE_INCORRECT_TOAST_KEY] = value }
     }
 }
