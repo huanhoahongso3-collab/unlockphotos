@@ -20,6 +20,7 @@ class PreferencesManager(private val context: Context) {
         val TAP_TOLERANCE_KEY = floatPreferencesKey("tap_tolerance")
         val STEALTH_MODE_KEY = booleanPreferencesKey("stealth_mode")
         val SHOW_CLICKED_POINTS_KEY = booleanPreferencesKey("show_clicked_points")
+        val POINT_COUNT_KEY = intPreferencesKey("point_count")
     }
 
     val pinFlow: Flow<String?> = context.dataStore.data.map { it[PIN_KEY] }
@@ -30,6 +31,7 @@ class PreferencesManager(private val context: Context) {
     val tapToleranceFlow: Flow<Float> = context.dataStore.data.map { it[TAP_TOLERANCE_KEY] ?: 0.08f }
     val stealthModeFlow: Flow<Boolean> = context.dataStore.data.map { it[STEALTH_MODE_KEY] ?: false }
     val showClickedPointsFlow: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CLICKED_POINTS_KEY] ?: true }
+    val pointCountFlow: Flow<Int> = context.dataStore.data.map { it[POINT_COUNT_KEY] ?: 3 }
 
     suspend fun savePin(pin: String) {
         context.dataStore.edit { it[PIN_KEY] = pin }
@@ -61,5 +63,9 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setShowClickedPoints(value: Boolean) {
         context.dataStore.edit { it[SHOW_CLICKED_POINTS_KEY] = value }
+    }
+
+    suspend fun setPointCount(value: Int) {
+        context.dataStore.edit { it[POINT_COUNT_KEY] = value }
     }
 }

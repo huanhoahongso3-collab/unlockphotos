@@ -64,6 +64,7 @@ fun MainScreen() {
     val tapTolerance by prefs.tapToleranceFlow.collectAsState(initial = 0.08f)
     val stealthMode by prefs.stealthModeFlow.collectAsState(initial = false)
     val showClickedPoints by prefs.showClickedPointsFlow.collectAsState(initial = true)
+    val pointCount by prefs.pointCountFlow.collectAsState(initial = 3)
 
     var pinInput by remember { mutableStateOf("") }
     LaunchedEffect(pin) {
@@ -91,6 +92,7 @@ fun MainScreen() {
             imageUri = imageUri!!,
             points = points,
             tapTolerance = tapTolerance,
+            requiredPoints = pointCount,
             onPointsChanged = { newPoints ->
                 scope.launch { prefs.savePoints(serializePoints(newPoints)) }
             },
@@ -206,6 +208,16 @@ fun MainScreen() {
                             steps = 19
                         )
                     }
+
+                    Column {
+                        Text("Number of Points: $pointCount")
+                        Slider(
+                            value = pointCount.toFloat(),
+                            onValueChange = { scope.launch { prefs.setPointCount(it.toInt()) } },
+                            valueRange = 1f..5f,
+                            steps = 3
+                        )
+                    }
                 }
             }
 
@@ -245,6 +257,7 @@ fun SetPointsScreen(
     imageUri: String,
     points: MutableList<PointData>,
     tapTolerance: Float,
+    requiredPoints: Int,
     onPointsChanged: (List<PointData>) -> Unit,
     onClose: () -> Unit
 ) {
@@ -261,7 +274,7 @@ fun SetPointsScreen(
                 .onSizeChanged { size = it }
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
-                        if (size != IntSize.Zero) {
+                        if (size != IntSize.Zero && points.size < requiredPoints) {
                             val newPoint = PointData(
                                 xPct = offset.x / size.width,
                                 yPct = offset.y / size.height
@@ -310,8 +323,11 @@ fun SetPointsScreen(
             }) {
                 Text("Remove Last Point")
             }
-            Button(onClick = onClose) {
-                Text("Done")
+            Button(
+                onClick = onClose,
+                enabled = points.size == requiredPoints
+            ) {
+                Text("Done (${points.size}/$requiredPoints)")
             }
         }
     }
