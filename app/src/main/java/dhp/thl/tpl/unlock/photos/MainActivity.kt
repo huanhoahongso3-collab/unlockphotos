@@ -36,9 +36,6 @@ import rikka.shizuku.Shizuku
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import android.content.ComponentName
-import android.content.ServiceConnection
-import android.os.IBinder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,29 +95,19 @@ fun MainScreen() {
         if (isGranted) {
             try {
                 val wallpaperManager = android.app.WallpaperManager.getInstance(context)
-                // Get the wallpaper drawable (this is more reliable than getWallpaperFile)
-                val drawable = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_LOCK) 
-                        ?: wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_SYSTEM)
-                } else {
-                    wallpaperManager.drawable
-                }
+                val drawable = wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_LOCK) 
+                    ?: wallpaperManager.getDrawable(android.app.WallpaperManager.FLAG_SYSTEM)
                 
                 if (drawable != null) {
                     val bitmap = if (drawable is android.graphics.drawable.BitmapDrawable) {
                         drawable.bitmap
                     } else {
-                        val bmp = android.graphics.Bitmap.createBitmap(
-                            drawable.intrinsicWidth.takeIf { it > 0 } ?: 1080,
-                            drawable.intrinsicHeight.takeIf { it > 0 } ?: 1920,
-                            android.graphics.Bitmap.Config.ARGB_8888
-                        )
-                        val canvas = android.graphics.Canvas(bmp)
+                        val b = android.graphics.Bitmap.createBitmap(drawable.intrinsicWidth.coerceAtLeast(1), drawable.intrinsicHeight.coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(b)
                         drawable.setBounds(0, 0, canvas.width, canvas.height)
                         drawable.draw(canvas)
-                        bmp
+                        b
                     }
-                    
                     val file = File(context.cacheDir, "lockscreen_wallpaper.png")
                     FileOutputStream(file).use { out ->
                         bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
