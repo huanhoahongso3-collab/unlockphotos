@@ -86,7 +86,10 @@ fun UnlockScreen(onUnlockSuccess: () -> Unit) {
             if (Shizuku.pingBinder() && !pin.isNullOrBlank()) {
                 try {
                     // Use Shizuku to run adb command to input PIN and press enter
-                    Shizuku.newProcess(arrayOf("sh", "-c", "input text $pin && input keyevent 66"), null, null).waitFor()
+                    // newProcess is hidden in newer Shizuku API, so we use reflection
+                    val newProcessMethod = Shizuku::class.java.getMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+                    val process = newProcessMethod.invoke(null, arrayOf("sh", "-c", "input text $pin && input keyevent 66"), null, null) as Process
+                    process.waitFor()
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
