@@ -133,13 +133,27 @@ fun MainScreen() {
                     var hasPermission by remember { mutableStateOf(if (shizukuOk) Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED else false) }
 
                     DisposableEffect(Unit) {
-                        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+                        val binderReceivedListener = Shizuku.OnBinderReceivedListener {
+                            shizukuOk = true
+                            hasPermission = Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        }
+                        val binderDeadListener = Shizuku.OnBinderDeadListener {
+                            shizukuOk = false
+                            hasPermission = false
+                        }
+                        val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
                             if (requestCode == 0) {
                                 hasPermission = grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED
                             }
                         }
-                        Shizuku.addRequestPermissionResultListener(listener)
-                        onDispose { Shizuku.removeRequestPermissionResultListener(listener) }
+                        Shizuku.addBinderReceivedListener(binderReceivedListener)
+                        Shizuku.addBinderDeadListener(binderDeadListener)
+                        Shizuku.addRequestPermissionResultListener(permissionListener)
+                        onDispose { 
+                            Shizuku.removeBinderReceivedListener(binderReceivedListener)
+                            Shizuku.removeBinderDeadListener(binderDeadListener)
+                            Shizuku.removeRequestPermissionResultListener(permissionListener) 
+                        }
                     }
 
                     if (shizukuOk) {
